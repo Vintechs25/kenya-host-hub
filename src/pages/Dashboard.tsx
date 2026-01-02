@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Server,
@@ -17,9 +17,13 @@ import {
   ChevronRight,
   Plus,
   MoreVertical,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const sidebarLinks = [
   { icon: Home, label: "Overview", href: "#overview", active: true },
@@ -52,8 +56,62 @@ const hostingAccounts = [
   },
 ];
 
+interface UserProfile {
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+}
+
 const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return;
+      
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("first_name, last_name, email")
+        .eq("user_id", user.id)
+        .single();
+
+      if (error) {
+        console.error("Error fetching profile:", error);
+      } else {
+        setProfile(data);
+      }
+      setLoadingProfile(false);
+    };
+
+    fetchProfile();
+  }, [user]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success("Logged out successfully");
+    navigate("/");
+  };
+
+  const getInitials = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
+    }
+    if (user?.email) {
+      return user.email[0].toUpperCase();
+    }
+    return "U";
+  };
+
+  const getDisplayName = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name} ${profile.last_name}`;
+    }
+    return user?.email || "User";
+  };
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -104,22 +162,27 @@ const Dashboard = () => {
           <div className="p-4 border-t border-sidebar-border">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-sidebar-accent flex items-center justify-center">
-                <span className="text-sm font-semibold text-sidebar-foreground">
-                  JD
-                </span>
+                {loadingProfile ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-sidebar-foreground" />
+                ) : (
+                  <span className="text-sm font-semibold text-sidebar-foreground">
+                    {getInitials()}
+                  </span>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  John Doe
+                  {loadingProfile ? "Loading..." : getDisplayName()}
                 </p>
                 <p className="text-xs text-sidebar-foreground/60 truncate">
-                  john@example.com
+                  {user?.email || ""}
                 </p>
               </div>
             </div>
             <Button
               variant="ghost"
               className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+              onClick={handleSignOut}
             >
               <LogOut className="w-4 h-4 mr-2" />
               Log Out
@@ -164,6 +227,20 @@ const Dashboard = () => {
 
         {/* Dashboard content */}
         <div className="p-4 md:p-6 lg:p-8 space-y-6">
+          {/* Welcome message */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-r from-accent/10 to-gold/10 rounded-2xl p-6 border border-accent/20"
+          >
+            <h2 className="font-display font-bold text-xl mb-2">
+              Welcome{profile?.first_name ? `, ${profile.first_name}` : ""}! 👋
+            </h2>
+            <p className="text-muted-foreground">
+              Your hosting dashboard is ready. Start by creating your first website or exploring our features.
+            </p>
+          </motion.div>
+
           {/* Stats cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
@@ -171,11 +248,12 @@ const Dashboard = () => {
               { label: "Storage Used", value: "2.0 GB", icon: Database, color: "gold" },
               { label: "Total Bandwidth", value: "23 GB", icon: Upload, color: "success" },
               { label: "Email Accounts", value: "5", icon: Mail, color: "primary" },
-            ].map((stat) => (
+            ].map((stat, index) => (
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
                 className="bg-card rounded-xl border border-border p-5"
               >
                 <div className="flex items-center justify-between mb-3">
